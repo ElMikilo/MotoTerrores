@@ -31,7 +31,7 @@ namespace MotoTerrores.Optimization
             {
                 if (_instance == null)
                 {
-                    _instance = FindObjectOfType<ObjectPool>();
+                    _instance = UnityEngine.Object.FindAnyObjectByType<ObjectPool>();
                     if (_instance == null)
                     {
                         GameObject go = new GameObject("[ObjectPool]");
@@ -194,9 +194,13 @@ namespace MotoTerrores.Optimization
         /// <summary>
         /// Limpiar un pool específico
         /// </summary>
+        /// <summary>
+        /// Limpiar un pool específico
+        /// </summary>
         public void ClearPool(string poolId)
         {
             if (!_pooledObjects.ContainsKey(poolId)) return;
+
 
             Queue<GameObject> pool = _pooledObjects[poolId];
             while (pool.Count > 0)
@@ -204,7 +208,10 @@ namespace MotoTerrores.Optimization
                 GameObject obj = pool.Dequeue();
                 if (obj != null)
                 {
-                    Destroy(obj);
+                    if (!Application.isPlaying)
+                        DestroyImmediate(obj);
+                    else
+                        Destroy(obj);
                 }
             }
         }

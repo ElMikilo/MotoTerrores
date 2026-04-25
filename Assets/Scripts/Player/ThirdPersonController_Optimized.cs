@@ -144,8 +144,20 @@ namespace StarterAssets
             _hasAnimator = TryGetComponent(out _animator);
             _controller = GetComponent<CharacterController>();
             _input = GetComponent<StarterAssetsInputs>();
+
+            // Null check para evitar NullReferenceException si el script falta
+            if (_input == null)
+            {
+                Debug.LogWarning("[ThirdPersonController] StarterAssetsInputs no encontrado. Creando componente.");
+                _input = gameObject.AddComponent<StarterAssetsInputs>();
+            }
+
 #if ENABLE_INPUT_SYSTEM
             _playerInput = GetComponent<PlayerInput>();
+            if (_playerInput == null)
+            {
+                Debug.LogError("[ThirdPersonController] PlayerInput es null. El Input System no está configurado.");
+            }
 #else
             Debug.LogError("Starter Assets package is missing dependencies. Please use Tools/Starter Assets/Reinstall Dependencies to fix it");
 #endif

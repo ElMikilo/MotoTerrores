@@ -199,26 +199,36 @@ public class EnemyMonster : MonoBehaviour
             return;
         }
 
+        Transform wp = patrolPoints[Mathf.Clamp(_patrolIndex, 0, patrolPoints.Length - 1)];
+
+        if (wp == null)
+        {
+            HoldPosition();
+            return;
+        }
+
+
         if (_agent.isOnNavMesh)
         {
             _agent.speed = patrolSpeed;
-            Transform wp = patrolPoints[Mathf.Clamp(_patrolIndex, 0, patrolPoints.Length - 1)];
-            if (wp)
+            if (!_agent.pathPending)
             {
-                if (!_agent.pathPending)
+                float d = Vector3.Distance(transform.position, wp.position);
+                if (d <= Mathf.Max(stoppingDistance, _agent.stoppingDistance) + 0.1f)
                 {
-                    float d = Vector3.Distance(transform.position, wp.position);
-                    if (d <= Mathf.Max(stoppingDistance, _agent.stoppingDistance) + 0.1f)
-                    {
-                        NextPatrolIndex();
-                        _patrolWaitTimer = patrolWaitSeconds;
-                        return;
-                    }
+                    NextPatrolIndex();
+                    _patrolWaitTimer = patrolWaitSeconds;
+                    return;
                 }
-                _agent.isStopped = false;
-                _agent.SetDestination(wp.position);
             }
+            _agent.isStopped = false;
+            _agent.SetDestination(wp.position);
         }
+        else
+        {
+            HoldPosition();
+        }
+
 
         if (animator && !string.IsNullOrEmpty(walkBool)) animator.SetBool(walkBool, true);
     }

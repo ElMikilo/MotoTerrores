@@ -56,22 +56,25 @@ namespace MotoTerreres.Optimization
                 targetCamera = Camera.main;
             }
 
+
             if (targetCamera == null)
             {
-                Debug.LogError("[DistanceCulling] No se encontró cámara");
+                Debug.LogError("[DistanceCulling] No se encontró cámara. Deshabilitando sistema.");
                 enabled = false;
                 return;
             }
+
 
             _cameraTransform = targetCamera.transform;
             FindCullingTargets();
         }
 
+
         private void FindCullingTargets()
         {
             _cullingTargets.Clear();
 
-            GameObject[] allObjects = FindObjectsOfType<GameObject>();
+            GameObject[] allObjects = Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
             foreach (GameObject obj in allObjects)
             {
                 // Solo objetos con renderers
@@ -231,7 +234,7 @@ namespace MotoTerreres.Optimization
 
         private void Start()
         {
-            _cullingSystem = FindObjectOfType<DistanceCulling>();
+            _cullingSystem = Object.FindAnyObjectByType<DistanceCulling>();
         }
 
         public float GetCullDistance()

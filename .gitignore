@@ -77,3 +77,5 @@ OPTIMIZATION_CHECKLIST.md
 ENEMY_SYSTEM_GUIDE.md
 Assets/AI Toolkit/Temp.meta
 Assets/AI Toolkit.meta
+CLAUDE.md
+.claude/settings.local.json

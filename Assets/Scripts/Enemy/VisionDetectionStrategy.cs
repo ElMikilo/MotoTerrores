@@ -9,7 +9,11 @@ public class VisionDetectionStrategy : MonoBehaviour, IDetectionStrategy
 {
     [Header("Vision")]
     [SerializeField, Min(0f)] private float detectionRange = 10f;
+    public float DetectionRange { get => detectionRange; set => detectionRange = value; }
+    
     [SerializeField, Range(0f, 360f)] private float fieldOfViewAngle = 120f;
+    public float FieldOfViewAngle { get => fieldOfViewAngle; set => fieldOfViewAngle = value; }
+    
     [SerializeField] private float eyeHeight = 1.6f;
 
     [Header("Line of Sight")]

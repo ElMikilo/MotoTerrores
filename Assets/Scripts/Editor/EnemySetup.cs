@@ -82,12 +82,12 @@ namespace MotoTerrores.Tools
             }
 
             // Configurar Vision
-            vision.detectionRange = detectionRange;
-            vision.fieldOfViewAngle = fieldOfViewAngle;
+            vision.DetectionRange = detectionRange;
+            vision.FieldOfViewAngle = fieldOfViewAngle;
 
             Debug.Log("[EnemySetup] ✓ Configuración completada!");
             Debug.Log("Por favor, configura los valores específicos en el Inspector:");
-            Debug.Log($"  - Animator: {animatorController ? animatorController.name : "NO ASIGNADO"}");
+            Debug.Log($"  - Animator: {(animatorController ? animatorController.name : "NO ASIGNADO")}");
             Debug.Log($"  - Sanity Damage: {sanityDamagePerSecond}");
             Debug.Log("  - Asigna el Animator Controller desde Assets/Objects/Enemigo/EnemyAnimatorController.controller");
         }

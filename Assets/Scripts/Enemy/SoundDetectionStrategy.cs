@@ -121,14 +121,23 @@ public class SoundDetectionStrategy : MonoBehaviour, IDetectionStrategy
     /// <summary>
     /// Verifica si el objetivo esta dentro del volumen de deteccion.
     /// </summary>
+    /// <summary>
+    /// Verifica si el objetivo esta dentro del volumen de deteccion.
+    /// </summary>
     bool IsInsideVolume(Transform targetTransform)
     {
         if (_volume == null || targetTransform == null)
             return false;
 
         Vector3 playerPos = targetTransform.position;
+        // ClosestPoint devuelve el punto más cercano DENTRO del collider
+        // Si playerPos está dentro, ClosestPoint devuelve playerPos
+        // Entonces la distancia debe ser ~0
         Vector3 closestPoint = _volume.ClosestPoint(playerPos);
-        return (closestPoint - playerPos).sqrMagnitude <= 1e-6f;
+        float distSq = (closestPoint - playerPos).sqrMagnitude;
+
+        // Usar umbral pequeño para determinar si está dentro
+        return distSq <= 1e-4f;
     }
 
     // Para usar en el inspector
