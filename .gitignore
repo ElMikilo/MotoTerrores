@@ -75,3 +75,5 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 OPTIMIZATION_CHECKLIST.md
 ENEMY_SYSTEM_GUIDE.md
+Assets/AI Toolkit/Temp.meta
+Assets/AI Toolkit.meta
