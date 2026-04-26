@@ -1,409 +1,293 @@
 using UnityEngine;
 using UnityEngine.AI;
+using System.Collections;
+
+public enum EnemyState { Patrolling, Chasing, Investigating, Stunned }
 
 [RequireComponent(typeof(NavMeshAgent))]
 public class EnemyMonster : MonoBehaviour
 {
+    [Header("Estado")]
+    [SerializeField] private EnemyState currentState = EnemyState.Patrolling;
+
     [Header("Target")]
     [SerializeField] Transform target;
     [SerializeField] string playerTag = "Player";
 
-    [Header("Movement")]
+    [Header("Patrulla")]
+    [SerializeField] PatrolRoute patrolRoute;
+    [SerializeField] float patrolSpeed = 2.5f;
+    private int _currentPatrolIndex = 0;
+
+    [Header("Movimiento")]
     [SerializeField] float stoppingDistance = 2f;
     [SerializeField] float rotationSpeed = 5f;
-    [SerializeField] float idleSpeed = 1.5f;
-    [SerializeField] float chaseSpeed = 3.5f;
+    [SerializeField] float chaseSpeed = 4.5f;
 
-    [Header("Animation")]
+    [Header("Animación")]
     [SerializeField] Animator animator;
     [SerializeField] string walkBool = "isWalking";
     [SerializeField] string stunnedBool = "isStunned";
+    [SerializeField] string attackTrigger = "Attack";
 
-    [Header("Detection")]
-    [SerializeField] MonoBehaviour detectionStrategyComponent;
+    [Header("Detección de Visión")]
+    [SerializeField] float visionRange = 18f;
+    [SerializeField] float visionAngle = 110f;
+    [SerializeField] LayerMask visionObstacles = ~0;
+    [SerializeField] float visionCheckInterval = 0.15f;
 
-    [Header("Sanity Damage")]
-    [SerializeField] float sanityDamagePerSecond = 0f;
+    [Header("Detección de Sonido")]
+    [SerializeField] float soundRange = 12f;
+    [SerializeField] float soundThreshold = 0.15f;
+    [SerializeField] float searchTimeAfterLost = 4f;
 
-    [Header("Patrol")]
-    [SerializeField] bool patrolEnabled = false;
-    [SerializeField] Transform[] patrolPoints;
-    [SerializeField] float patrolSpeed = 2.5f;
-    [SerializeField] float patrolWaitSeconds = 0.5f;
-    [SerializeField] bool patrolPingPong = false;
-    [SerializeField] bool patrolRandom = false;
+    [Header("Configuración de Ataque")]
+    [SerializeField] float killDistance = 2f;
+    [SerializeField] float attackCooldown = 2.5f;
 
-    [Header("Strategy Guard")]
-    [SerializeField] bool forceEnableStrategyOnStart = true;
-    [SerializeField] int enableGuardFrames = 20;
-
-    [Header("Light Stun")]
+    [Header("Aturdimiento por Luz")]
     [SerializeField] bool canBeStunnedByLight = true;
-    [SerializeField] float stunSeconds = 2.5f;
-    [SerializeField] bool freezeAgentOnStun = true;
+    [SerializeField] float stunSeconds = 3f;
     [SerializeField] AudioClip stunSfx;
     [SerializeField, Range(0f, 1f)] float stunSfxVolume = 1f;
 
-    [Header("SFX")]
-    [SerializeField] AudioSource sfxSource;
-    [SerializeField] AudioClip detectionSfx;
-    [SerializeField, Range(0f, 1f)] float detectionSfxVolume = 1f;
-    [SerializeField] float detectionSfxRearmSeconds = 1.0f;
-
-    [Header("Pinning Control")]
-    [SerializeField] float pinStopDistance = 1.1f;
-    [SerializeField] float pinResumeDistance = 1.6f;
-    [SerializeField] float pinBackWallCheck = 0.6f;
-    [SerializeField] float pinCheckHeight = 1.2f;
-    [SerializeField] LayerMask environmentMask = ~0;
-
-    private IDetectionStrategy _detection;
     private NavMeshAgent _agent;
-    private bool _isChasing;
-    private Vector3 _lastPerceivedTargetPos;
-    private int _patrolIndex;
-    private int _patrolDir = 1;
-    private float _patrolWaitTimer;
-    private int _guardCounter;
-    private bool _isStunned;
     private float _stunEndTime;
-    private float _suppressUntilTime;
-    private bool _isPinning;
-    private bool _detectionArmed = true;
-    private float _lastNotDetectTime;
-    private GameObject _playerGO;
-
-    public bool CurrentlyDetecting { get; private set; }
-    public bool IsStunned => _isStunned;
+    private float _nextAttackTime;
+    private Vector3 _investigationTarget;
+    private bool _isPlayerDetected;
+    private Coroutine _detectionCoroutine;
 
     void Awake()
     {
         _agent = GetComponent<NavMeshAgent>();
         if (!animator) animator = GetComponent<Animator>();
-        _playerGO = GameObject.FindWithTag(playerTag);
-        if (!target && _playerGO) target = _playerGO.transform;
-        BindDetection();
+        
+        GameObject playerGO = GameObject.FindGameObjectWithTag(playerTag);
+        if (!target && playerGO) target = playerGO.transform;
+
         if (_agent)
         {
-            _agent.speed = idleSpeed;
             _agent.stoppingDistance = stoppingDistance;
             _agent.autoBraking = true;
         }
-        _guardCounter = enableGuardFrames;
-        _detectionArmed = true;
-        _lastNotDetectTime = Time.time;
+    }
+
+    void Start()
+    {
+        _detectionCoroutine = StartCoroutine(DetectionRoutine());
+        ChangeState(EnemyState.Patrolling);
     }
 
     void OnEnable()
     {
-        if (forceEnableStrategyOnStart) EnableStrategy();
-        _guardCounter = enableGuardFrames;
+        GameEvents.OnNoiseChanged += OnNoiseChanged;
+    }
+
+    void OnDisable()
+    {
+        GameEvents.OnNoiseChanged -= OnNoiseChanged;
+        if (_detectionCoroutine != null) StopCoroutine(_detectionCoroutine);
+    }
+
+    private void OnNoiseChanged(float noiseLevel)
+    {
+        if (currentState == EnemyState.Stunned || _isPlayerDetected) return;
+
+        if (noiseLevel > soundThreshold)
+        {
+            float distSq = (transform.position - target.position).sqrMagnitude;
+            if (distSq <= soundRange * soundRange)
+            {
+                _investigationTarget = target.position;
+                if (currentState != EnemyState.Chasing)
+                {
+                    Debug.Log("[Mikilo] Escuché un ruido sospechoso...");
+                    ChangeState(EnemyState.Investigating);
+                }
+            }
+        }
+    }
+
+    private IEnumerator DetectionRoutine()
+    {
+        WaitForSeconds wait = new WaitForSeconds(visionCheckInterval);
+        while (true)
+        {
+            bool canSee = CanSeePlayer();
+            
+            if (canSee && !_isPlayerDetected)
+            {
+                Debug.Log("[Mikilo] ¡TE ENCONTRÉ!");
+                ChangeState(EnemyState.Chasing);
+            }
+            
+            _isPlayerDetected = canSee;
+
+            if (!_isPlayerDetected && currentState == EnemyState.Chasing)
+            {
+                if (!_agent.pathPending && _agent.remainingDistance < 1f)
+                {
+                    yield return new WaitForSeconds(searchTimeAfterLost);
+                    if (!_isPlayerDetected) 
+                    {
+                        Debug.Log("[Mikilo] Se me perdió el rastro... vuelvo a patrullar.");
+                        ChangeState(EnemyState.Patrolling);
+                    }
+                }
+            }
+
+            yield return wait;
+        }
     }
 
     void Update()
     {
-        if (_isStunned)
+        if (currentState == EnemyState.Stunned)
         {
-            if (Time.time >= _stunEndTime) EndStun();
-            else { HoldPosition(); return; }
-        }
-
-        if (Time.time < _suppressUntilTime)
-        {
-            PatrolUpdate(false);
+            if (Time.time >= _stunEndTime) ChangeState(EnemyState.Patrolling);
             return;
         }
 
-        if (!target || _agent == null || _detection == null) { PatrolUpdate(false); return; }
-        if (!_agent.isOnNavMesh) { PatrolUpdate(false); return; }
+        if (!target || _agent == null || !_agent.isOnNavMesh) return;
 
-        if (forceEnableStrategyOnStart && _guardCounter > 0) { EnableStrategy(); _guardCounter--; }
-
-        bool prevDetect = CurrentlyDetecting;
-        Vector3 perceivedPos;
-        CurrentlyDetecting = _detection.Detect(target, out perceivedPos);
-
-        float dist = Vector3.Distance(transform.position, target.position);
-        bool pinNow = CheckPinning(dist);
-        if (pinNow)
+        switch (currentState)
         {
-            _isPinning = true;
-            HoldPosition();
-            Face(target.position);
-            return;
-        }
-        else if (_isPinning && dist > pinResumeDistance)
-        {
-            _isPinning = false;
+            case EnemyState.Patrolling:
+                UpdatePatrol();
+                break;
+            case EnemyState.Chasing:
+                UpdateChase();
+                break;
+            case EnemyState.Investigating:
+                UpdateInvestigate();
+                break;
         }
 
-        if (CurrentlyDetecting && !prevDetect && _detectionArmed)
+        UpdateAnimation();
+    }
+
+    private void ChangeState(EnemyState newState)
+    {
+        currentState = newState;
+        if (_agent == null || !_agent.isOnNavMesh) return;
+
+        _agent.isStopped = false;
+        
+        switch (newState)
         {
-            if (detectionSfx)
-            {
-                if (sfxSource) sfxSource.PlayOneShot(detectionSfx, detectionSfxVolume);
-                else AudioSource.PlayClipAtPoint(detectionSfx, transform.position, detectionSfxVolume);
-            }
-            _detectionArmed = false;
+            case EnemyState.Patrolling:
+                _agent.speed = patrolSpeed;
+                _agent.stoppingDistance = 0.5f;
+                MoveToNextPatrolPoint();
+                break;
+            case EnemyState.Chasing:
+                _agent.speed = chaseSpeed;
+                _agent.stoppingDistance = stoppingDistance;
+                break;
+            case EnemyState.Investigating:
+                _agent.speed = patrolSpeed;
+                _agent.stoppingDistance = 0.5f;
+                _agent.SetDestination(_investigationTarget);
+                break;
+            case EnemyState.Stunned:
+                _agent.ResetPath();
+                _agent.isStopped = true;
+                if (animator) animator.SetBool(stunnedBool, true);
+                break;
         }
 
-        if (CurrentlyDetecting)
-        {
-            _isChasing = true;
-            _lastPerceivedTargetPos = perceivedPos;
-            Chase(perceivedPos);
-        }
-        else
-        {
-            if (!_detectionArmed && Time.time - _lastNotDetectTime >= detectionSfxRearmSeconds) _detectionArmed = true;
-            _lastNotDetectTime = Time.time;
+        if (newState != EnemyState.Stunned && animator)
+            animator.SetBool(stunnedBool, false);
+    }
 
-            if (_isChasing)
-            {
-                float d = Vector3.Distance(transform.position, _lastPerceivedTargetPos);
-                if (d > stoppingDistance * 1.1f) Chase(_lastPerceivedTargetPos);
-                else { _isChasing = false; PatrolUpdate(true); }
-            }
-            else
-            {
-                PatrolUpdate(false);
-            }
+    private void UpdatePatrol()
+    {
+        if (patrolRoute == null || patrolRoute.Points.Length == 0) return;
+
+        if (!_agent.pathPending && _agent.remainingDistance < 0.8f)
+        {
+            MoveToNextPatrolPoint();
         }
     }
 
-    bool CheckPinning(float distToPlayer)
+    private void MoveToNextPatrolPoint()
     {
-        if (distToPlayer > pinStopDistance) return false;
-        Vector3 center = target.position + Vector3.up * pinCheckHeight;
-        Vector3 toEnemy = (transform.position - target.position);
-        toEnemy.y = 0f;
-        if (toEnemy.sqrMagnitude < 0.0001f) return false;
-        Vector3 backDir = -toEnemy.normalized;
-        if (Physics.SphereCast(center, 0.3f, backDir, out var hit, pinBackWallCheck, environmentMask, QueryTriggerInteraction.Ignore))
-            return true;
-        return false;
+        if (patrolRoute == null || patrolRoute.Points.Length == 0) return;
+        _agent.SetDestination(patrolRoute.Points[_currentPatrolIndex].position);
+        _currentPatrolIndex = (_currentPatrolIndex + 1) % patrolRoute.Points.Length;
     }
 
-    void PatrolUpdate(bool justLostTarget)
+    private void UpdateChase()
     {
-        if (!patrolEnabled || patrolPoints == null || patrolPoints.Length == 0)
+        _agent.SetDestination(target.position);
+
+        float distSq = (transform.position - target.position).sqrMagnitude;
+        if (distSq < killDistance * killDistance)
         {
-            HoldPosition();
-            return;
-        }
-
-        if (_patrolWaitTimer > 0f)
-        {
-            _patrolWaitTimer -= Time.deltaTime;
-            HoldPosition();
-            return;
-        }
-
-        Transform wp = patrolPoints[Mathf.Clamp(_patrolIndex, 0, patrolPoints.Length - 1)];
-
-        if (wp == null)
-        {
-            HoldPosition();
-            return;
-        }
-
-
-        if (_agent.isOnNavMesh)
-        {
-            _agent.speed = patrolSpeed;
-            if (!_agent.pathPending)
-            {
-                float d = Vector3.Distance(transform.position, wp.position);
-                if (d <= Mathf.Max(stoppingDistance, _agent.stoppingDistance) + 0.1f)
-                {
-                    NextPatrolIndex();
-                    _patrolWaitTimer = patrolWaitSeconds;
-                    return;
-                }
-            }
-            _agent.isStopped = false;
-            _agent.SetDestination(wp.position);
-        }
-        else
-        {
-            HoldPosition();
-        }
-
-
-        if (animator && !string.IsNullOrEmpty(walkBool)) animator.SetBool(walkBool, true);
-    }
-
-    void NextPatrolIndex()
-    {
-        if (!patrolPingPong)
-        {
-            if (patrolRandom && patrolPoints.Length > 1)
-            {
-                int next;
-                do { next = Random.Range(0, patrolPoints.Length); } while (next == _patrolIndex);
-                _patrolIndex = next;
-            }
-            else
-            {
-                _patrolIndex = (_patrolIndex + 1) % patrolPoints.Length;
-            }
-            return;
-        }
-
-        _patrolIndex += _patrolDir;
-        if (_patrolIndex >= patrolPoints.Length) { _patrolIndex = patrolPoints.Length - 2; _patrolDir = -1; }
-        else if (_patrolIndex < 0) { _patrolIndex = 1; _patrolDir = 1; }
-    }
-
-    void Chase(Vector3 pos)
-    {
-        if (_agent.isOnNavMesh)
-        {
-            _agent.speed = chaseSpeed;
-            _agent.isStopped = false;
-            _agent.SetDestination(pos);
-        }
-        if (animator && !string.IsNullOrEmpty(walkBool)) animator.SetBool(walkBool, true);
-        Face(pos);
-    }
-
-    void HoldPosition()
-    {
-        if (_agent.isOnNavMesh)
-        {
-            _agent.ResetPath();
-            _agent.isStopped = true;
-        }
-        if (animator && !string.IsNullOrEmpty(walkBool)) animator.SetBool(walkBool, false);
-    }
-
-    void Face(Vector3 pos)
-    {
-        Vector3 p = pos; p.y = transform.position.y;
-        Vector3 dir = p - transform.position;
-        if (dir.sqrMagnitude < 0.0001f) return;
-        Quaternion look = Quaternion.LookRotation(dir);
-        transform.rotation = Quaternion.Slerp(transform.rotation, look, Time.deltaTime * rotationSpeed);
-    }
-
-    void OnTriggerStay(Collider other)
-    {
-        if (sanityDamagePerSecond <= 0f) return;
-        if (!other.CompareTag(playerTag)) return;
-        if (!CurrentlyDetecting) return;
-        var s = other.GetComponent<SanitySystem>();
-        if (s != null) s.TakeDamage(sanityDamagePerSecond * Time.deltaTime);
-    }
-
-    void BindDetection()
-    {
-        _detection = null;
-        if (detectionStrategyComponent is IDetectionStrategy ds)
-        {
-            _detection = ds;
-            EnableStrategy();
-            _detection.Initialize(this);
-            return;
-        }
-        var comps = GetComponents<MonoBehaviour>();
-        for (int i = 0; i < comps.Length; i++)
-        {
-            if (comps[i] is IDetectionStrategy s)
-            {
-                _detection = s;
-                detectionStrategyComponent = (MonoBehaviour)s;
-                EnableStrategy();
-                _detection.Initialize(this);
-                return;
-            }
-        }
-        var children = GetComponentsInChildren<MonoBehaviour>(true);
-        for (int i = 0; i < children.Length; i++)
-        {
-            if (children[i] is IDetectionStrategy s2)
-            {
-                _detection = s2;
-                detectionStrategyComponent = (MonoBehaviour)s2;
-                EnableStrategy();
-                _detection.Initialize(this);
-                return;
-            }
+            TryAttack();
         }
     }
 
-    void EnableStrategy()
+    private void TryAttack()
     {
-        var beh = detectionStrategyComponent as Behaviour;
-        if (beh && !beh.enabled) beh.enabled = true;
+        if (Time.time < _nextAttackTime) return;
+
+        _nextAttackTime = Time.time + attackCooldown;
+        
+        if (animator && !string.IsNullOrEmpty(attackTrigger))
+            animator.SetTrigger(attackTrigger);
+
+        if (LivesSystem.I != null)
+        {
+            Debug.Log("[Mikilo] ¡TE ATRAPÉ!");
+            LivesSystem.I.LoseLife();
+        }
+    }
+
+    private void UpdateInvestigate()
+    {
+        if (!_agent.pathPending && _agent.remainingDistance < 0.7f)
+        {
+            ChangeState(EnemyState.Patrolling);
+        }
+    }
+
+    private void UpdateAnimation()
+    {
+        if (animator == null || string.IsNullOrEmpty(walkBool)) return;
+        bool isMoving = _agent.velocity.sqrMagnitude > 0.1f;
+        animator.SetBool(walkBool, isMoving);
+    }
+
+    bool CanSeePlayer()
+    {
+        if (target == null) return false;
+
+        Vector3 from = transform.position + Vector3.up * 1.5f;
+        Vector3 to = target.position + Vector3.up * 1f;
+        Vector3 dir = (to - from).normalized;
+
+        if ((to - from).sqrMagnitude > visionRange * visionRange) return false;
+
+        if (Vector3.Angle(transform.forward, dir) > visionAngle * 0.5f) return false;
+
+        if (Physics.Raycast(from, dir, out RaycastHit hit, visionRange, visionObstacles, QueryTriggerInteraction.Ignore))
+        {
+            if (hit.transform != target && !hit.transform.IsChildOf(target))
+                return false;
+        }
+
+        return true;
     }
 
     public void ApplyLightStun(float customDuration)
     {
         if (!canBeStunnedByLight) return;
-        float d = customDuration > 0f ? customDuration : stunSeconds;
-        _isStunned = true;
-        _stunEndTime = Time.time + d;
-        if (_agent) { _agent.ResetPath(); if (freezeAgentOnStun) _agent.isStopped = true; }
-        CurrentlyDetecting = false;
-        _isChasing = false;
-        if (animator && !string.IsNullOrEmpty(stunnedBool)) animator.SetBool(stunnedBool, true);
+        _stunEndTime = Time.time + (customDuration > 0f ? customDuration : stunSeconds);
+        ChangeState(EnemyState.Stunned);
+        
         if (stunSfx)
-        {
-            if (sfxSource) sfxSource.PlayOneShot(stunSfx, stunSfxVolume);
-            else AudioSource.PlayClipAtPoint(stunSfx, transform.position, stunSfxVolume);
-        }
+            AudioSource.PlayClipAtPoint(stunSfx, transform.position, stunSfxVolume);
     }
-
-    void EndStun()
-    {
-        _isStunned = false;
-        if (_agent) _agent.isStopped = false;
-        if (animator && !string.IsNullOrEmpty(stunnedBool)) animator.SetBool(stunnedBool, false);
-    }
-
-    public void UsePatrolRoute(PatrolRoute route)
-    {
-        if (route == null) { patrolEnabled = false; patrolPoints = null; return; }
-        patrolPoints = route.Points;
-        patrolEnabled = patrolPoints != null && patrolPoints.Length > 0;
-        _patrolIndex = 0;
-    }
-
-    public void SetPatrolPoints(Transform[] pts)
-    {
-        patrolPoints = pts;
-        patrolEnabled = patrolPoints != null && patrolPoints.Length > 0;
-        _patrolIndex = 0;
-    }
-
-    public void SuppressFor(float seconds)
-    {
-        _suppressUntilTime = Mathf.Max(_suppressUntilTime, Time.time + Mathf.Max(0f, seconds));
-        _isChasing = false;
-        CurrentlyDetecting = false;
-        if (_agent) { _agent.ResetPath(); _agent.isStopped = false; }
-        _detectionArmed = true;
-        _lastNotDetectTime = Time.time;
-    }
-
-    public void WarpAwayFrom(Vector3 origin, float minDistance)
-    {
-        if (_agent == null) return;
-        Vector3 dir = transform.position - origin;
-        dir.y = 0f;
-        if (dir.sqrMagnitude < 0.001f) dir = new Vector3(Random.Range(-1f, 1f), 0f, Random.Range(-1f, 1f));
-        dir.Normalize();
-        Vector3 targetPos = origin + dir * Mathf.Max(0.1f, minDistance);
-        NavMeshHit hit;
-        if (NavMesh.SamplePosition(targetPos, out hit, minDistance + 2f, NavMesh.AllAreas)) _agent.Warp(hit.position);
-        else _agent.Warp(targetPos);
-        _isChasing = false;
-        CurrentlyDetecting = false;
-        _agent.ResetPath();
-        _detectionArmed = true;
-        _lastNotDetectTime = Time.time;
-    }
-
-    public Transform Target => target;
-    public NavMeshAgent Agent => _agent;
 }

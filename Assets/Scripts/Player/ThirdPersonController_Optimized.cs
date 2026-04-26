@@ -235,6 +235,10 @@ namespace StarterAssets
             Vector3 horizontalVelocity = new Vector3(_controller.velocity.x, 0.0f, _controller.velocity.z);
             float currentHorizontalSpeed = horizontalVelocity.magnitude;
 
+            // Emitir ruido segun velocidad
+            float noiseLevel = currentHorizontalSpeed / SprintSpeed;
+            if (noiseLevel > 0.1f) GameEvents.RaiseNoiseChanged(noiseLevel);
+
             float speedOffset = 0.1f;
             float inputMagnitude = _input.analogMovement ? _input.move.magnitude : 1f;
 

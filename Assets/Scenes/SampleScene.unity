@@ -1241,7 +1241,7 @@ PrefabInstance:
       objectReference: {fileID: 2100000, guid: 18648df4900f44f4a9e3b814ccf7be46, type: 2}
     - target: {fileID: 919132149155446097, guid: e0901252a75d1984c919e40e2dd78c5a, type: 3}
       propertyPath: m_Name
-      value: mIKILO.V1
+      value: mIKILO
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -20340,7 +20340,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 574111a9e3fe3c34586ef7d9d09aeb11, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyMonster
-  target: {fileID: 0}
+  target: {fileID: 967430531}
   playerTag: Player
   stoppingDistance: 2
   rotationSpeed: 5
@@ -20375,6 +20375,14 @@ MonoBehaviour:
   environmentMask:
     serializedVersion: 2
     m_Bits: 4294967295
+  attackRange: 2.5
+  jumpForce: 8
+  jumpForwardMultiplier: 1.5
+  attackCooldown: 2
+  jumpAttackTriggerDistance: 3
+  jumpAttackHeight: 2
+  landingRecoverySeconds: 0.5
+  proximityDetectionRange: 5
 --- !u!195 &1510434549
 NavMeshAgent:
   m_ObjectHideFlags: 0
@@ -20443,10 +20451,10 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.01
-  m_Height: 0.01
+  m_Radius: 0.005
+  m_Height: 0.015
   m_Direction: 1
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Center: {x: 0, y: 0.006, z: 0}
 --- !u!1 &1521945698
 GameObject:
   m_ObjectHideFlags: 0

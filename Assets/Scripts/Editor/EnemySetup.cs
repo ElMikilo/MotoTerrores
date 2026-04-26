@@ -73,17 +73,9 @@ namespace MotoTerrores.Tools
                 Debug.Log("[EnemySetup] EnemyMonster añadido.");
             }
 
-            // 4. Añadir VisionDetectionStrategy si no existe
-            VisionDetectionStrategy vision = GetComponent<VisionDetectionStrategy>();
-            if (vision == null)
-            {
-                vision = gameObject.AddComponent<VisionDetectionStrategy>();
-                Debug.Log("[EnemySetup] VisionDetectionStrategy añadido.");
-            }
-
-            // Configurar Vision
-            vision.DetectionRange = detectionRange;
-            vision.FieldOfViewAngle = fieldOfViewAngle;
+            // 4. Configurar Vision en EnemyMonster directamente
+            // Los valores de vision se configuran en el Inspector del EnemyMonster
+            Debug.Log("[EnemySetup] Vision configurada en EnemyMonster.");
 
             Debug.Log("[EnemySetup] ✓ Configuración completada!");
             Debug.Log("Por favor, configura los valores específicos en el Inspector:");
