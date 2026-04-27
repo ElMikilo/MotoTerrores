@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Events;
 
 public class AIController : MonoBehaviour
 {
@@ -7,11 +8,19 @@ public class AIController : MonoBehaviour
     public float speed = 3f;
     public float detectionRange = 10f;
 
+    [Header("Player Animation")]
+    public Animator playerAnimator;
+
+    [Header("Events")]
+    public UnityEvent onChaseStart;
+    public UnityEvent onChaseEnd;
+
     private int currentWaypointIndex = 0;
     private Rigidbody rb;
     private Animator animator;
     private static readonly int IsWalking = Animator.StringToHash("isWalking");
     private static readonly int IsChasing = Animator.StringToHash("isChasing");
+    private static readonly int PlayerIsScared = Animator.StringToHash("IsScared");
 
     void Start()
     {
@@ -19,9 +28,19 @@ public class AIController : MonoBehaviour
         animator = GetComponent<Animator>();
     }
 
+    private bool wasChasing = false;
+
     void FixedUpdate()
     {
         bool chasing = PlayerInRange();
+
+        if (chasing && !wasChasing)
+            onChaseStart?.Invoke();
+        else if (!chasing && wasChasing)
+            onChaseEnd?.Invoke();
+
+        wasChasing = chasing;
+
         if (chasing)
             ChasePlayer();
         else
@@ -32,6 +51,9 @@ public class AIController : MonoBehaviour
             animator.SetBool(IsWalking, !chasing);
             animator.SetBool(IsChasing, chasing);
         }
+
+        if (playerAnimator != null)
+            playerAnimator.SetBool(PlayerIsScared, chasing);
     }
 
     bool PlayerInRange()
