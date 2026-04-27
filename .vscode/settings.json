@@ -52,5 +52,6 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "MotoTerrores.slnx"
+    "dotnet.defaultSolution": "MotoTerrores.slnx",
+    "dotnet.preferCSharpExtension": true
 }
