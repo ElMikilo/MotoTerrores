@@ -8,6 +8,14 @@ public class PersecucionMikilo : MonoBehaviour
     private Transform objetivo;
     private NavMeshAgent agente;
 
+    [Header("Configuracion de Movimiento")]
+    public float velocidadBase = 4f;
+    public float velocidadRabia = 6f;
+    public float aceleracion = 6f;
+
+    [Header("Referencias")]
+    public ContadorTroncos contadorTroncos;
+
     [Header("Configuracion del Screamer")]
     public GameObject imagenScreamer; 
     public AudioSource sonidoScreamer; 
@@ -30,6 +38,8 @@ public class PersecucionMikilo : MonoBehaviour
         }
         
         agente = GetComponent<NavMeshAgent>();
+        agente.speed = velocidadBase;
+        agente.acceleration = aceleracion;
     }
 
     private void Start()
@@ -40,6 +50,10 @@ public class PersecucionMikilo : MonoBehaviour
     private void Update()
     {
         if (yaMeAtrapo || objetivo == null) return;
+
+        // Aumentar velocidad cuando el jugador tiene todos los troncos
+        if (contadorTroncos != null && contadorTroncos.TieneTroncosSuficientes())
+            agente.speed = velocidadRabia;
 
         agente.SetDestination(objetivo.position);
 
@@ -89,4 +103,4 @@ public class PersecucionMikilo : MonoBehaviour
             }
         }
     }
-} 
+}
